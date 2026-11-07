@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NT - Live Switcher Controller</title>
+  <!-- PDF.js library for client-side camera script parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script>
+    if (window['pdfjs-dist/build/pdf']) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    }
+  </script>
+  <style>
+    :root {
+      --bg-dark: #121212;
+      --card-bg: #1e1e1e;
+      --border-color: #333333;
+      --accent-cyan: #00e5ff;
+      --accent-red: #d32f2f;
+      --accent-green: #2e7d32;
+      --accent-amber: #f57c00;
+      --accent-purple: #ab47bc;
+      --text-main: #ffffff;
+      --text-muted: #aaaaaa;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    
+    html, body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      padding: 15px;
+      min-height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    header { display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 12px 20px; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 15px; }
+    header h1 { font-size: 1.1rem; color: var(--accent-cyan); letter-spacing: 1px; display: flex; align-items: center; gap: 10px; }
+
+    .net-config { display: flex; align-items: center; gap: 10px; }
+    .net-config input { background: #2a2a2a; border: 1px solid var(--border-color); color: #fff; padding: 6px 10px; border-radius: 4px; font-family: monospace; font-size: 0.85rem; }
+    .btn { background: #333; color: white; border: none; padding: 7px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: all 0.2s; font-size: 0.8rem; text-transform: uppercase; }
+    .btn:hover { filter: brightness(1.2); }
+    .btn-connect { background: #0088cc; }
+    .btn-connect.connected { background: var(--accent-green); }
+    .btn-import { background: #6a1b9a; }
+    .btn-cfg { background: #00bcd4; color: #000; }
+    .status-badge { font-family: monospace; font-size: 0.75rem; padding: 4px 8px; border-radius: 3px; font-weight: bold; }
+    .status-badge.online { background: rgba(46, 125, 50, 0.3); color: #81c784; border: 1px solid var(--accent-green); }
+    .status-badge.offline { background: rgba(211, 47, 47, 0.3); color: #e57373; border: 1px solid var(--accent-red); }
+
+    /* Diagnostic Alert Banner */
+    #alertBanner { display: none; background: #b71c1c; color: #fff; padding: 10px 15px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; margin-bottom: 15px; justify-content: space-between; align-items: center; }
+
+    /* Multi-Playlist Tab Strip */
+    .playlist-tabs { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; overflow-x: auto; scrollbar-width: thin; }
+    .tab-btn { background: #262626; color: var(--text-muted); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 4px 4px 0 0; font-size: 0.8rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .tab-btn.active { background: #181818; color: var(--accent-cyan); border-color: var(--accent-cyan); border-bottom-color: #181818; }
+    .tab-btn .close-tab { color: #888; border-radius: 50%; padding: 0 4px; font-size: 0.75rem; }
+    .tab-btn .close-tab:hover { color: #ff5252; background: rgba(255,82,82,0.2); }
+    .btn-add-tab { background: #2e7d32; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.8rem; flex-shrink: 0; }
+
+    /* Dashboard Vertical Stack */
+    .dashboard-stack { display: flex; flex-direction: column; gap: 15px; width: 100%; }
+
+    /* Cue Engine Panel */
+    .panel { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
+    .panel-title { font-size: 0.85rem; font-weight: bold; color: var(--accent-cyan); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+
+    .cue-exec-header { display: flex; gap: 12px; align-items: center; }
+    .btn-cue-prev { background: var(--accent-amber); padding: 12px 20px; font-size: 0.95rem; letter-spacing: 0.5px; }
+    .btn-cue-next { background: #0088cc; padding: 12px 30px; font-size: 1.1rem; letter-spacing: 1px; flex: 1; }
+
+    /* 4-Card Cue Tracker Grid for Next 2 Events */
+    .cue-tracker { display: grid; grid-template-columns: 1fr 2fr 1fr 1fr; gap: 10px; background: #161616; padding: 10px; border-radius: 4px; text-align: center; border: 1px solid #2a2a2a; }
+    .tracker-card { display: flex; flex-direction: column; gap: 2px; }
+    .tracker-card .lbl { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; }
+    .tracker-card .val { font-size: 0.95rem; font-family: monospace; font-weight: bold; }
+    .tracker-card.active .val { color: var(--accent-cyan); font-size: 1.2rem; }
+
+    /* Scrollable Cue Table Container */
+    .table-container { max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px; background: #181818; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left; }
+    th { background: #252525; padding: 10px 12px; position: sticky; top: 0; color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.7rem; z-index: 2; }
+    td { padding: 8px 12px; border-bottom: 1px solid #282828; }
+    tr:hover { background: #222; cursor: pointer; }
+    tr.active-row { background: rgba(0, 229, 255, 0.15) !important; border-left: 4px solid var(--accent-cyan); }
+    tr.active-row td { color: #fff; font-weight: bold; }
+
+    select.trans-dropdown {
+      background: #111;
+      color: var(--accent-cyan);
+      border: 1px solid var(--accent-cyan);
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-weight: bold;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    /* Manual Cue Form Grid */
+    .cue-form { 
+      display: grid; 
+      grid-template-columns: 90px 110px 90px 130px 1fr auto; 
+      gap: 10px; 
+      background: #181818; 
+      padding: 12px; 
+      border-radius: 4px; 
+      border: 1px solid var(--border-color); 
+      align-items: center; 
+    }
+    .cue-form input, .cue-form select { 
+      background: #282828; 
+      border: 1px solid #555; 
+      color: #fff; 
+      padding: 8px 10px; 
+      border-radius: 4px; 
+      font-size: 0.85rem; 
+    }
+    .cue-form select:focus, .cue-form input:focus { 
+      border-color: var(--accent-cyan); 
+      outline: none; 
+    }
+
+    /* Switcher Hardware M/E Panel */
+    .switcher-panel { display: flex; flex-direction: column; gap: 10px; background: #181818; border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; }
+    .bus-row { display: flex; align-items: center; gap: 8px; }
+    .bus-label { font-family: monospace; font-weight: bold; font-size: 0.8rem; width: 55px; }
+    .bus-label.pgm { color: #ff5252; }
+    .bus-label.pvw { color: #69f0ae; }
+
+    .bus-scroll { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; flex: 1; scrollbar-width: thin; }
+    .src-btn { background: #2c2c2c; border: 1px solid #3a3a3a; color: #ccc; min-width: 50px; height: 36px; font-weight: bold; font-size: 0.75rem; border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .src-btn:hover { background: #3d3d3d; }
+    .pgm .src-btn.active { background: #b71c1c; color: #fff; border-color: #ff5252; box-shadow: 0 0 8px rgba(255, 82, 82, 0.5); }
+    .pvw .src-btn.active { background: #1b5e20; color: #fff; border-color: #69f0ae; box-shadow: 0 0 8px rgba(105, 240, 174, 0.5); }
+
+    .active-readout { font-family: monospace; font-size: 0.75rem; color: var(--accent-cyan); width: 140px; text-align: right; }
+
+    .trans-key-row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 10px; }
+    .trans-btns { display: flex; gap: 8px; }
+    .btn-trans { width: 90px; height: 38px; font-size: 0.85rem; }
+    .btn-cut { background: var(--accent-red); }
+    .btn-auto { background: var(--accent-amber); }
+
+    .keyer-group { display: flex; gap: 6px; }
+    .key-btn { width: 65px; height: 38px; background: #333; color: var(--accent-cyan); font-weight: bold; font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 3px; cursor: pointer; }
+    .key-btn.active { background: var(--accent-cyan); color: #000; box-shadow: 0 0 8px rgba(0, 229, 255, 0.6); }
+
+    .delegate-group { display: flex; gap: 6px; margin-left: 10px; padding-left: 12px; border-left: 1px solid var(--border-color); }
+    .dlg-btn { min-width: 70px; height: 38px; background: #333; color: var(--accent-amber); font-weight: bold; font-size: 0.75rem; border: 1px solid var(--border-color); border-radius: 3px; cursor: pointer; }
+    .dlg-btn.active { background: var(--accent-amber); color: #000; box-shadow: 0 0 8px rgba(245, 124, 0, 0.6); }
+
+    .macro-group { display: flex; gap: 4px; }
+    .macro-btn { background: #263238; color: #eceff1; border: 1px solid #37474f; padding: 6px 10px; font-size: 0.7rem; font-weight: bold; border-radius: 3px; cursor: pointer; }
+    .macro-btn:hover { background: #37474f; }
+
+    /* Config Modal Styling */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 100; align-items: center; justify-content: center; }
+    .modal-box { background: #1e1e1e; border: 1px solid var(--accent-cyan); border-radius: 6px; width: 420px; padding: 20px; box-shadow: 0 0 20px rgba(0, 229, 255, 0.2); }
+    .modal-title { font-size: 1rem; font-weight: bold; color: var(--accent-cyan); margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+    .modal-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+    .modal-field label { font-size: 0.75rem; color: var(--text-muted); font-weight: bold; text-transform: uppercase; }
+    .modal-field input, .modal-field select { background: #121212; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 0.85rem; }
+    .modal-actions { display: flex; justify-content: space-between; margin-top: 18px; }
+
+    input[type="file"] { display: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Header Control Bar -->
+  <header>
+    <h1><span>NT</span> <span style="font-size: 0.75rem; color: #888;">Shiran's Awesom Media Broadcast Assistant</span></h1>
+    <div class="net-config">
+      <button class="btn btn-cfg" onclick="toggleConfigModal(true)">⚙ SWITCHER CONFIG</button>
+      <input type="text" id="bridgeHost" value="localhost:8765" placeholder="Bridge Address">
+      <button class="btn btn-connect" id="btnConnect" onclick="toggleBridge()">CONNECT BRIDGE</button>
+      <span class="status-badge offline" id="bridgeStatus">OFFLINE</span>
+      <button class="btn btn-import" onclick="document.getElementById('pdfInput').click()">IMPORT PDF SCRIPT</button>
+      <input type="file" id="pdfInput" accept=".pdf" onchange="parseScriptPDF(this.files[0])">
+    </div>
+  </header>
+
+  <!-- Diagnostic Alert Banner -->
+  <div id="alertBanner">
+    <span id="alertMsg">System status ok.</span>
+    <button style="background:none; border:none; color:#fff; cursor:pointer;" onclick="this.parentElement.style.display='none'">✕</button>
+  </div>
+
+  <div class="dashboard-stack">
+    
+    <!-- Timeline Cue Engine Panel -->
+    <div class="panel">
+      <div class="panel-title">
+        <span>Timeline Cue Engine</span>
+        <span style="font-size: 0.7rem; color: #888;">Shortcuts: [Space/Enter] Advance | [Left Arrow/P] Previous</span>
+      </div>
+
+      <!-- Multi-Playlist Tab Strip -->
+      <div class="playlist-tabs" id="playlistTabStrip">
+        <!-- Tabs rendered dynamically -->
+      </div>
+
+      <!-- Executive Execution Header -->
+      <div class="cue-exec-header">
+        <button class="btn btn-cue-prev" onclick="previousCue()">◄ PREVIOUS CUE</button>
+        <button class="btn btn-cue-next" onclick="advanceCue()">ADVANCE CUE (NEXT) ►</button>
+      </div>
+
+      <!-- Extended Cue Tracker showing Previous, Current Active, Next (+1), and Next (+2) -->
+      <div class="cue-tracker">
+        <div class="tracker-card">
+          <span class="lbl">Previous</span>
+          <span class="val" id="prevCueVal">--</span>
+        </div>
+        <div class="tracker-card active">
+          <span class="lbl">Current Active</span>
+          <span class="val" id="currCueVal">1.0</span>
+        </div>
+        <div class="tracker-card">
+          <span class="lbl">Next On Deck (+1)</span>
+          <span class="val" id="nextCueVal">--</span>
+        </div>
+        <div class="tracker-card">
+          <span class="lbl">In Queue (+2)</span>
+          <span class="val" id="next2CueVal">--</span>
+        </div>
+      </div>
+
+      <!-- Scrollable Cue Table -->
+      <div class="table-container" id="tableContainer">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 70px;">Cue #</th>
+              <th style="width: 90px;">Bus</th>
+              <th style="width: 70px;">Src/ID</th>
+              <th style="width: 120px;">Transition</th>
+              <th>Description / Shot Notes / Beat Count</th>
+              <th style="width: 60px; text-align: center;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="cueTableBody">
+            <!-- Dynamically populated cues -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Manual Cue Creation Form -->
+      <form class="cue-form" id="manualCueForm" onsubmit="event.preventDefault(); addManualCue();">
+        <input type="number" id="newCueNum" step="0.1" placeholder="Cue #" required>
+        <select id="newCueBus">
+          <option value="PGM">PGM</option>
+          <option value="PVW">PVW</option>
+          <option value="KEY">KEY TOGGLE</option>
+          <option value="MACRO">MACRO</option>
+        </select>
+        <input type="number" id="newCueSrc" min="1" max="35" placeholder="Src ID" required>
+        
+        <select id="newCueTrans" style="background: #111; color: var(--accent-cyan); font-weight: bold; border-color: var(--accent-cyan);">
+          <option value="CUT" selected>CUT (Default)</option>
+          <option value="AUTO">AUTO TRANS</option>
+        </select>
+
+        <input type="text" id="newCueDesc" placeholder="Shot description / notes (optional)">
+        <button type="submit" class="btn" style="background: #0088cc; height: 36px; padding: 0 20px;">+ ADD CUE</button>
+      </form>
+    </div>
+
+    <!-- Switcher Hardware M/E Panel -->
+    <div class="switcher-panel">
+      <div class="panel-title" style="border:none; padding:0;">
+        <span id="meTitle">M/E 1 Direct CPL Control (35 Sources)</span>
+      </div>
+
+      <!-- Program Bus -->
+      <div class="bus-row pgm">
+        <span class="bus-label pgm">PGM</span>
+        <div class="bus-scroll" id="pgmBus"></div>
+        <span class="active-readout" id="pgmActiveLbl">ACTIVE: SRC 1</span>
+      </div>
+
+      <!-- Preview Bus -->
+      <div class="bus-row pvw">
+        <span class="bus-label pvw">PVW</span>
+        <div class="bus-scroll" id="pvwBus"></div>
+        <span class="active-readout" id="pvwActiveLbl">ACTIVE: SRC 2</span>
+      </div>
+
+      <!-- Transitions, Keyers & Macros -->
+      <div class="trans-key-row">
+        <div class="trans-btns">
+          <button class="btn btn-trans btn-cut" onclick="triggerAction('CUT')">CUT</button>
+          <button class="btn btn-trans btn-auto" onclick="triggerAction('AUTOTRANS')">AUTO TRANS</button>
+        </div>
+
+        <div class="keyer-group">
+          <button class="key-btn" id="keyBtn1" onclick="toggleKeyer(1)">KEY 1</button>
+          <button class="key-btn" id="keyBtn2" onclick="toggleKeyer(2)">KEY 2</button>
+          <button class="key-btn" id="keyBtn3" onclick="toggleKeyer(3)">KEY 3</button>
+          <button class="key-btn" id="keyBtn4" onclick="toggleKeyer(4)">KEY 4</button>
+          <div class="delegate-group">
+            <button class="dlg-btn active" id="dlgBtn1" data-dlg="1" onclick="selectDelegate(1)">M/E1</button>
+            <button class="dlg-btn" id="dlgBtn2" data-dlg="2" onclick="selectDelegate(2)">M/E2</button>
+            <button class="dlg-btn" id="dlgBtn3" data-dlg="3" onclick="selectDelegate(3)">M/E3</button>
+            <button class="dlg-btn" id="dlgBtn4" data-dlg="4" onclick="selectDelegate(4)">PGM/PST</button>
+          </div>
+        </div>
+
+        <div class="macro-group" id="macroGroup"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Switcher Configuration Modal -->
+  <div class="modal-overlay" id="configModal">
+    <div class="modal-box">
+      <div class="modal-title">
+        <span>GVG K-FRAME CPL CONFIGURATION</span>
+        <button style="background:none; border:none; color:#aaa; cursor:pointer;" onclick="toggleConfigModal(false)">✕</button>
+      </div>
+
+      <div class="modal-field">
+        <label>K-Frame Switcher IP Address</label>
+        <input type="text" id="cfgIp" value="10.1.32.10">
+      </div>
+
+      <div class="modal-field">
+        <label>Control Port (TCP CPL / Tally Port)</label>
+        <input type="number" id="cfgPort" value="5000">
+      </div>
+
+      <div class="modal-field">
+        <label>Suite Assignment</label>
+        <select id="cfgSuite">
+          <option value="1">Suite 1 (Default)</option>
+          <option value="2">Suite 2</option>
+        </select>
+      </div>
+
+      <div class="modal-field">
+        <label>Control Protocol Standard</label>
+        <select id="cfgProtocol">
+          <option value="GVG_CPL">GVG CPL Protocol (TCP 5000)</option>
+        </select>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn" onclick="testKFrameSocket()" style="background:#444;">TEST PING</button>
+        <div>
+          <button class="btn" onclick="toggleConfigModal(false)" style="background:#333; margin-right:5px;">CANCEL</button>
+          <button class="btn" onclick="saveKFrameConfig()" style="background:var(--accent-green);">SAVE CONFIG</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // System Network & Switcher State
+    let socket = null;
+    let bridgeConnected = false;
+    let activePgm = 1;
+    let activePvw = 2;
+    let keyStates = { 1: false, 2: false, 3: false, 4: false };
+
+    // Delegation: which bus the source rows, CUT/AUTO TRANS and KEY buttons drive.
+    // 1 = M/E1, 2 = M/E2, 3 = M/E3, 4 = PGM/PST  (the bridge's "me" field is delegate - 1)
+    const DELEGATE_NAMES = { 1: 'M/E 1', 2: 'M/E 2', 3: 'M/E 3', 4: 'PGM/PST' };
+    let delegate = 1;
+
+    // K-Frame Native CPL Configuration State
+    let kframeConfig = {
+      ip: "172.17.17.212",
+      port: 5000,
+      suite: 1,
+      protocol: "GVG_CPL"
+    };
+
+    // Multi-Playlist State Manager
+    let playlists = [
+      {
+        id: "pl-1",
+        name: "Main Show",
+        cues: [
+          { num: "1.0", bus: "PGM", source: 1, trans: "CUT", desc: "Default Initial Scene" },
+          { num: "2.0", bus: "PGM", source: 2, trans: "CUT", desc: "Preset Cam 2" },
+          { num: "3.0", bus: "PGM", source: 3, trans: "CUT", desc: "Preset Cam 3" }
+        ],
+        currentIndex: 0
+      }
+    ];
+    let activePlaylistId = "pl-1";
+
+    function getActivePlaylist() {
+      return playlists.find(p => p.id === activePlaylistId) || playlists[0];
+    }
+
+    // Modal Control Functions
+    function toggleConfigModal(show) {
+      document.getElementById('configModal').style.display = show ? 'flex' : 'none';
+    }
+
+    function saveKFrameConfig() {
+      kframeConfig.ip = document.getElementById('cfgIp').value.trim();
+      kframeConfig.port = parseInt(document.getElementById('cfgPort').value, 10);
+      kframeConfig.suite = parseInt(document.getElementById('cfgSuite').value, 10);
+      kframeConfig.protocol = document.getElementById('cfgProtocol').value;
+
+      sendPayload({ type: "SET_CONFIG", config: kframeConfig });
+      showAlert(`Configuration saved for CPL Target ${kframeConfig.ip}:${kframeConfig.port}`, true);
+      toggleConfigModal(false);
+    }
+
+    function testKFrameSocket() {
+      const ip = document.getElementById('cfgIp').value.trim();
+      const port = document.getElementById('cfgPort').value.trim();
+      showAlert(`Testing CPL Target ${ip}:${port} over bridge...`, true);
+      sendPayload({ type: "TEST_CONNECTION", ip, port });
+    }
+
+    // Render Tab Bar
+    function renderPlaylistTabs() {
+      const tabStrip = document.getElementById('playlistTabStrip');
+      tabStrip.innerHTML = '';
+
+      playlists.forEach(pl => {
+        const btn = document.createElement('button');
+        btn.className = `tab-btn ${pl.id === activePlaylistId ? 'active' : ''}`;
+        btn.onclick = () => switchPlaylist(pl.id);
+
+        const label = document.createElement('span');
+        label.innerText = pl.name;
+        btn.appendChild(label);
+
+        if (playlists.length > 1) {
+          const closeBtn = document.createElement('span');
+          closeBtn.className = 'close-tab';
+          closeBtn.innerText = '✕';
+          closeBtn.onclick = (e) => {
+            e.stopPropagation();
+            closePlaylist(pl.id);
+          };
+          btn.appendChild(closeBtn);
+        }
+
+        tabStrip.appendChild(btn);
+      });
+
+      const addBtn = document.createElement('button');
+      addBtn.className = 'btn-add-tab';
+      addBtn.innerText = '+ NEW PLAYLIST';
+      addBtn.onclick = createNewPlaylist;
+      tabStrip.appendChild(addBtn);
+    }
+
+    function createNewPlaylist() {
+      const newId = 'pl-' + Date.now();
+      const newName = `Playlist ${playlists.length + 1}`;
+      playlists.push({
+        id: newId,
+        name: newName,
+        cues: [
+          { num: "1.0", bus: "PGM", source: 1, trans: "CUT", desc: "Initial Shot" }
+        ],
+        currentIndex: 0
+      });
+      switchPlaylist(newId);
+    }
+
+    function switchPlaylist(id) {
+      activePlaylistId = id;
+      renderPlaylistTabs();
+      renderCueTable();
+    }
+
+    function closePlaylist(id) {
+      if (playlists.length <= 1) return;
+      playlists = playlists.filter(p => p.id !== id);
+      if (activePlaylistId === id) {
+        activePlaylistId = playlists[0].id;
+      }
+      renderPlaylistTabs();
+      renderCueTable();
+    }
+
+    // Initialize Switcher Hardware Buttons
+    function initSwitcherUI() {
+      const pgmBus = document.getElementById('pgmBus');
+      const pvwBus = document.getElementById('pvwBus');
+      const macroGroup = document.getElementById('macroGroup');
+
+      pgmBus.innerHTML = '';
+      pvwBus.innerHTML = '';
+      macroGroup.innerHTML = '';
+
+      for (let i = 1; i <= 35; i++) {
+        // PGM Button
+        const pgmBtn = document.createElement('button');
+        pgmBtn.className = `src-btn ${i === activePgm ? 'active' : ''}`;
+        pgmBtn.id = `pgm-btn-${i}`;
+        pgmBtn.innerText = `SRC ${i}`;
+        pgmBtn.onclick = () => selectSource('PGM', i);
+        pgmBus.appendChild(pgmBtn);
+
+        // PVW Button
+        const pvwBtn = document.createElement('button');
+        pvwBtn.className = `src-btn ${i === activePvw ? 'active' : ''}`;
+        pvwBtn.id = `pvw-btn-${i}`;
+        pvwBtn.innerText = `SRC ${i}`;
+        pvwBtn.onclick = () => selectSource('PVW', i);
+        pvwBus.appendChild(pvwBtn);
+      }
+
+      for (let m = 1; m <= 8; m++) {
+        const mBtn = document.createElement('button');
+        mBtn.className = 'macro-btn';
+        mBtn.innerText = `M${m}`;
+        mBtn.onclick = () => triggerMacro(m);
+        macroGroup.appendChild(mBtn);
+      }
+    }
+
+    function sortCues(pl) {
+      pl.cues.sort((a, b) => parseFloat(a.num) - parseFloat(b.num));
+    }
+
+    // Render Active Playlist Cue Table & Center Active Row to Keep Next 2 Events Visible
+    function renderCueTable() {
+      const pl = getActivePlaylist();
+      sortCues(pl);
+
+      const tbody = document.getElementById('cueTableBody');
+      tbody.innerHTML = '';
+
+      let activeRowElement = null;
+
+      pl.cues.forEach((cue, index) => {
+        const tr = document.createElement('tr');
+        if (index === pl.currentIndex) {
+          tr.className = 'active-row';
+          activeRowElement = tr;
+        }
+        tr.onclick = () => jumpToCue(index);
+
+        tr.innerHTML = `
+          <td><strong>${cue.num}</strong></td>
+          <td><span style="color:${cue.bus === 'PGM' ? '#ff5252' : cue.bus === 'PVW' ? '#69f0ae' : '#00e5ff'}">${cue.bus}</span></td>
+          <td>SRC ${cue.source}</td>
+          <td onclick="event.stopPropagation();">
+            <select class="trans-dropdown" onchange="updateCueTransition(${index}, this.value)">
+              <option value="CUT" ${cue.trans === 'CUT' || !cue.trans ? 'selected' : ''}>CUT</option>
+              <option value="AUTO" ${cue.trans === 'AUTO' ? 'selected' : ''}>AUTO TRANS</option>
+            </select>
+          </td>
+          <td>${cue.desc || '--'}</td>
+          <td style="text-align:center;"><button style="background:none; border:none; color:#ff5252; cursor:pointer;" onclick="deleteCue(event, ${index})">✕</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      updateTrackerUI();
+
+      if (activeRowElement) {
+        activeRowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    function updateCueTransition(index, newTrans) {
+      const pl = getActivePlaylist();
+      if (pl.cues[index]) {
+        pl.cues[index].trans = newTrans;
+        updateTrackerUI();
+      }
+    }
+
+    // Update Tracker UI with Next (+1) and Next (+2) Events
+    function updateTrackerUI() {
+      const pl = getActivePlaylist();
+      if (pl.cues.length === 0) return;
+
+      const prev = pl.cues[pl.currentIndex - 1];
+      const curr = pl.cues[pl.currentIndex];
+      const next1 = pl.cues[(pl.currentIndex + 1) % pl.cues.length];
+      const next2 = pl.cues[(pl.currentIndex + 2) % pl.cues.length];
+
+      document.getElementById('prevCueVal').innerText = prev ? `${prev.num} (SRC ${prev.source})` : '--';
+      document.getElementById('currCueVal').innerText = curr ? `${curr.num} [${curr.bus} ${curr.source} | ${curr.trans || 'CUT'}]` : '--';
+      document.getElementById('nextCueVal').innerText = (pl.cues.length > 1 && next1) ? `${next1.num} (SRC ${next1.source})` : '--';
+      document.getElementById('next2CueVal').innerText = (pl.cues.length > 2 && next2) ? `${next2.num} (SRC ${next2.source})` : '--';
+    }
+
+    // Add Cue Manually into Active Playlist
+    function addManualCue() {
+      const numInput = document.getElementById('newCueNum');
+      const busInput = document.getElementById('newCueBus');
+      const srcInput = document.getElementById('newCueSrc');
+      const transInput = document.getElementById('newCueTrans');
+      const descInput = document.getElementById('newCueDesc');
+
+      const rawNum = numInput.value.trim();
+      const rawSrc = srcInput.value.trim();
+
+      if (!rawNum || !rawSrc) {
+        showAlert("Please provide both a Cue # and a Source ID.");
+        return;
+      }
+
+      const numVal = parseFloat(rawNum).toFixed(1);
+      const srcVal = parseInt(rawSrc, 10);
+      const busVal = busInput.value;
+      const transVal = transInput.value || "CUT";
+      const descVal = descInput.value.trim() || `Manual Cue ${numVal}`;
+
+      const pl = getActivePlaylist();
+      const existingIdx = pl.cues.findIndex(c => parseFloat(c.num) === parseFloat(numVal));
+      if (existingIdx !== -1) {
+        pl.cues[existingIdx] = { num: String(numVal), bus: busVal, source: srcVal, trans: transVal, desc: descVal };
+      } else {
+        pl.cues.push({ num: String(numVal), bus: busVal, source: srcVal, trans: transVal, desc: descVal });
+      }
+
+      renderCueTable();
+
+      numInput.value = '';
+      srcInput.value = '';
+      descInput.value = '';
+      transInput.value = 'CUT';
+      numInput.focus();
+    }
+
+    // Execute Cue Action with CPL Crosspoint / Action Handling
+    function executeCue(cue) {
+      if (!cue) return;
+
+      if (cue.bus === 'PGM' || cue.bus === 'PVW') {
+        if (cue.bus === 'PGM') {
+          selectSource('PVW', cue.source);
+          if (cue.trans === 'AUTO') {
+            triggerAction('AUTOTRANS');
+          } else {
+            triggerAction('CUT');
+          }
+        } else {
+          selectSource('PVW', cue.source);
+        }
+      } else if (cue.bus === 'KEY') {
+        toggleKeyer(cue.source);
+      } else if (cue.bus === 'MACRO') {
+        triggerMacro(cue.source);
+      }
+    }
+
+    function advanceCue() {
+      const pl = getActivePlaylist();
+      if (pl.cues.length === 0) return;
+
+      if (pl.currentIndex < pl.cues.length - 1) {
+        pl.currentIndex++;
+      } else {
+        pl.currentIndex = 0;
+      }
+      executeCue(pl.cues[pl.currentIndex]);
+      renderCueTable();
+    }
+
+    function previousCue() {
+      const pl = getActivePlaylist();
+      if (pl.cues.length === 0) return;
+
+      if (pl.currentIndex > 0) {
+        pl.currentIndex--;
+      } else {
+        pl.currentIndex = pl.cues.length - 1;
+      }
+      executeCue(pl.cues[pl.currentIndex]);
+      renderCueTable();
+    }
+
+    function jumpToCue(index) {
+      const pl = getActivePlaylist();
+      pl.currentIndex = index;
+      executeCue(pl.cues[pl.currentIndex]);
+      renderCueTable();
+    }
+
+    function deleteCue(e, index) {
+      e.stopPropagation();
+      const pl = getActivePlaylist();
+      pl.cues.splice(index, 1);
+      if (pl.currentIndex >= pl.cues.length) pl.currentIndex = Math.max(0, pl.cues.length - 1);
+      renderCueTable();
+    }
+
+    // Switcher Hardware Control emitting GVG CPL normalized JSON frames
+    // Fixed mapping on every delegate (M/E1-3 and PGM/PST): PGM row = bus A, PVW row = bus B
+    function busLetter(bus) {
+      return bus === 'PGM' ? 'a' : 'b';
+    }
+
+    function updateReadouts() {
+      const rd = (id, src, bus) => {
+        document.getElementById(id).innerText =
+          src ? `ACTIVE: SRC ${src} [${busLetter(bus).toUpperCase()}]` : 'ACTIVE: --';
+      };
+      rd('pgmActiveLbl', activePgm, 'PGM');
+      rd('pvwActiveLbl', activePvw, 'PVW');
+    }
+
+    function selectSource(bus, srcId, send = true) {
+      if (bus === 'PGM') {
+        if (activePgm) document.getElementById(`pgm-btn-${activePgm}`)?.classList.remove('active');
+        activePgm = srcId;
+        document.getElementById(`pgm-btn-${srcId}`)?.classList.add('active');
+      } else {
+        if (activePvw) document.getElementById(`pvw-btn-${activePvw}`)?.classList.remove('active');
+        activePvw = srcId;
+        document.getElementById(`pvw-btn-${srcId}`)?.classList.add('active');
+      }
+      updateReadouts();
+
+      // send=false updates only the on-screen mirror (used after a transition / status read)
+      if (send) {
+        sendPayload({
+          action: "crosspoint",
+          me: delegate - 1,        // 0 = M/E1, 1 = M/E2, 2 = M/E3, 3 = PGM/PST
+          bus: busLetter(bus),     // actual frame bus: "a" or "b"
+          source: srcId
+        });
+      }
+    }
+
+    function triggerAction(action) {
+      // The switcher itself swaps PGM/PVW on a transition. Mirror that locally
+      // WITHOUT sending crosspoints, otherwise the frame would swap a second time.
+      // Buses do not flip on any delegate: PGM stays bus A, PVW stays bus B. Only the on-screen
+      // sources are swapped. Status is read just on connect and when a delegate button is selected.
+      const temp = activePgm;
+      selectSource('PGM', activePvw, false);
+      selectSource('PVW', temp, false);
+      sendPayload({
+        action: "transition",
+        type: action.toLowerCase(),
+        me: delegate - 1
+      });
+    }
+
+    // Updates the KEY button + local state only (no command sent to the frame)
+    function setKeyerUI(keyNum, on) {
+      keyStates[keyNum] = !!on;
+      document.getElementById(`keyBtn${keyNum}`)?.classList.toggle('active', !!on);
+    }
+
+    function toggleKeyer(keyNum) {
+      setKeyerUI(keyNum, !keyStates[keyNum]);
+
+      sendPayload({
+        action: "key",
+        me: delegate - 1,
+        keyer: keyNum,
+        state: keyStates[keyNum]
+      });
+    }
+
+    // Ask the bridge to read the delegated bus's current A/B crosspoints and keyer on/off state
+    function requestStatus() {
+      sendPayload({ action: "status", me: delegate - 1 });
+    }
+
+    // Mirror the frame's state on the panel WITHOUT sending anything back to the frame.
+    // Fields the bridge could not read (null/missing) leave the current display untouched.
+    function applyStatus(d) {
+      if (!d) return;
+      if (typeof d.me === 'number' && d.me !== delegate - 1) return;   // reply for a bus we've left
+      // bus A -> PGM row, bus B -> PVW row (fall back to the bridge's pgm/pvw if A/B were not reported)
+      const a = d.bus_a != null ? d.bus_a : d.pgm;
+      const b = d.bus_b != null ? d.bus_b : d.pvw;
+      if (a != null) selectSource('PGM', a, false);
+      if (b != null) selectSource('PVW', b, false);
+      updateReadouts();
+      if (d.keys) {
+        for (const k of [1, 2, 3, 4]) {
+          if (d.keys[k] !== undefined) setKeyerUI(k, d.keys[k]);
+        }
+      }
+    }
+
+    // Delegate the source rows, transitions and keyers to M/E1, M/E2, M/E3 or PGM/PST
+    function selectDelegate(n) {
+      delegate = n;
+      document.querySelectorAll('.dlg-btn').forEach(b =>
+        b.classList.toggle('active', Number(b.dataset.dlg) === n));
+      document.getElementById('meTitle').innerText = `${DELEGATE_NAMES[n]} Direct CPL Control (35 Sources)`;
+
+      // Show "unknown" until the frame has told us what this bus holds
+      if (activePgm) document.getElementById(`pgm-btn-${activePgm}`)?.classList.remove('active');
+      if (activePvw) document.getElementById(`pvw-btn-${activePvw}`)?.classList.remove('active');
+      activePgm = null;
+      activePvw = null;
+      updateReadouts();
+      for (const k of [1, 2, 3, 4]) setKeyerUI(k, false);
+
+      requestStatus();
+    }
+
+    function triggerMacro(mNum) {
+      sendPayload({
+        action: "macro",
+        macro: mNum
+      });
+    }
+
+    // WebSocket Network Communication
+    function toggleBridge() {
+      if (bridgeConnected) {
+        if (socket) socket.close();
+        return;
+      }
+
+      const host = document.getElementById('bridgeHost').value.trim();
+      try {
+        socket = new WebSocket(`ws://${host}`);
+        socket.onopen = () => {
+          bridgeConnected = true;
+          document.getElementById('btnConnect').innerText = 'DISCONNECT';
+          document.getElementById('btnConnect').classList.add('connected');
+          document.getElementById('bridgeStatus').className = 'status-badge online';
+          document.getElementById('bridgeStatus').innerText = 'CPL ONLINE';
+          saveKFrameConfig(); // Sync CPL configuration upon connecting
+          requestStatus();    // then read current ME1 bus A/B + keyer state from the frame
+        };
+        socket.onmessage = (ev) => {
+          try {
+            const r = JSON.parse(ev.data);
+            if (r.status === 'error') showAlert(`Bridge: ${r.message || r.action + ' failed'}`);
+            else if (r.action === 'status') {
+              applyStatus(r.data);
+              showAlert(`Bridge: ${r.message}`, true);
+            }
+            else if (r.action === 'test' || r.action === 'set_config') showAlert(`Bridge: ${r.message}`, true);
+          } catch (e) { /* ignore non-JSON */ }
+        };
+        socket.onclose = () => {
+          bridgeConnected = false;
+          document.getElementById('btnConnect').innerText = 'CONNECT BRIDGE';
+          document.getElementById('btnConnect').classList.remove('connected');
+          document.getElementById('bridgeStatus').className = 'status-badge offline';
+          document.getElementById('bridgeStatus').innerText = 'OFFLINE';
+        };
+        socket.onerror = () => {
+          showAlert("WebSocket connection error. Is bridge.py running on your laptop?");
+        };
+      } catch (e) {
+        showAlert("Failed to initialize WebSocket: " + e.message);
+      }
+    }
+
+    function sendPayload(payload) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(payload));
+      }
+    }
+
+    function showAlert(msg, isSuccess = false) {
+      const banner = document.getElementById('alertBanner');
+      document.getElementById('alertMsg').innerText = msg;
+      banner.style.background = isSuccess ? '#2e7d32' : '#b71c1c';
+      banner.style.display = 'flex';
+    }
+
+    // PDF Script Parser importing into the Active Playlist
+    async function parseScriptPDF(file) {
+      if (!file) return;
+
+      if (typeof pdfjsLib === 'undefined') {
+        showAlert("PDF.js library is not loaded. Ensure you have an active network connection.");
+        return;
+      }
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let documentRows = [];
+
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          const viewport = page.getViewport({ scale: 1.0 });
+
+          let items = textContent.items.map(item => {
+            const tx = item.transform;
+            const x = tx[4];
+            const y = viewport.height - tx[5];
+            return { text: item.str.trim(), x, y };
+          }).filter(item => item.text.length > 0);
+
+          let pageRows = [];
+          items.forEach(item => {
+            let row = pageRows.find(r => Math.abs(r.y - item.y) < 12);
+            if (row) {
+              row.items.push(item);
+            } else {
+              pageRows.push({ y: item.y, items: [item] });
+            }
+          });
+
+          pageRows.sort((a, b) => a.y - b.y);
+
+          pageRows.forEach(row => {
+            row.items.sort((a, b) => a.x - b.x);
+            documentRows.push(row);
+          });
+        }
+
+        let extractedCues = [];
+        let eventIndices = [];
+
+        documentRows.forEach((row, idx) => {
+          let hasCombined = row.items.some(it => /^\d+\.\s*\d+$/.test(it.text));
+          let hasDotCue = row.items.some(it => /^\d+\.$/.test(it.text));
+          if (hasCombined || hasDotCue) {
+            eventIndices.push(idx);
+          }
+        });
+
+        for (let e = 0; e < eventIndices.length; e++) {
+          let startRowIdx = eventIndices[e];
+          let endRowIdx = (e + 1 < eventIndices.length) ? eventIndices[e + 1] : documentRows.length;
+
+          let firstRow = documentRows[startRowIdx];
+          let rawCue = "";
+          let sourceId = 1;
+          let textTokens = [];
+
+          let combinedIdx = firstRow.items.findIndex(it => /^\d+\.\s*\d+$/.test(it.text));
+          if (combinedIdx !== -1) {
+            let parts = firstRow.items[combinedIdx].text.split(/\.\s*/);
+            rawCue = parts[0];
+            sourceId = parseInt(parts[1]) || 1;
+            textTokens = firstRow.items.slice(combinedIdx + 1).map(it => it.text);
+          } else {
+            let cueIdx = firstRow.items.findIndex(it => /^\d+\.$/.test(it.text));
+            if (cueIdx !== -1) {
+              rawCue = firstRow.items[cueIdx].text.replace('.', '');
+              if (cueIdx + 1 < firstRow.items.length) {
+                let nextToken = firstRow.items[cueIdx + 1].text;
+                if (/^\d{1,2}$/.test(nextToken)) {
+                  sourceId = parseInt(nextToken);
+                  textTokens = firstRow.items.slice(cueIdx + 2).map(it => it.text);
+                } else {
+                  textTokens = firstRow.items.slice(cueIdx + 1).map(it => it.text);
+                }
+              }
+            }
+          }
+
+          for (let r = startRowIdx + 1; r < endRowIdx; r++) {
+            let lineText = documentRows[r].items.map(it => it.text).join(" ");
+            if (!/Page:|Prog No|Tx Date|Issue Date|Version No/i.test(lineText)) {
+              textTokens.push(lineText);
+            }
+          }
+
+          extractedCues.push({
+            num: String(rawCue),
+            bus: 'PGM',
+            source: sourceId,
+            trans: 'CUT',
+            desc: textTokens.join(" ").trim() || `Camera ${sourceId}`
+          });
+        }
+
+        if (extractedCues.length > 0) {
+          const pl = getActivePlaylist();
+          pl.name = file.name.replace(/\.[^/.]+$/, "");
+          pl.cues = extractedCues;
+          pl.currentIndex = 0;
+          renderPlaylistTabs();
+          renderCueTable();
+          showAlert(`Successfully imported ${pl.cues.length} cues into playlist "${pl.name}"!`, true);
+        } else {
+          showAlert("Could not extract cues from PDF. Ensure the PDF contains structured camera script text.");
+        }
+      } catch (err) {
+        showAlert("Error reading PDF file: " + err.message);
+      }
+    }
+
+    // Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+      if (e.code === 'Space' || e.code === 'Enter') {
+        e.preventDefault();
+        advanceCue();
+      } else if (e.code === 'ArrowLeft' || e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        previousCue();
+      }
+    });
+
+    // Window Initializer
+    window.onload = () => {
+      initSwitcherUI();
+      renderPlaylistTabs();
+      renderCueTable();
+    };
+  </script>
+</body>
+</html>
