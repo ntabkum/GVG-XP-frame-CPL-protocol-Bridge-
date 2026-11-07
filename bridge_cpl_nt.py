@@ -1,5 +1,5 @@
 """
-NAVA - CPL bridge: WebSocket -> K-Frame. Tested with Zurich XP Frame V 17.7.1
+NAVA - CPL bridge: WebSocket -> K-Frame. Tested with Zurich XP Frame V 17.7.1 and V20.1.1
 
 Modes
   default   DRY-RUN. Logs what it would do, touches nothing.
